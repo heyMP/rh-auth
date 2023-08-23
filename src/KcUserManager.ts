@@ -1,12 +1,15 @@
 import Keycloak, { type KeycloakInitOptions } from "keycloak-js";
-import { keyed } from "lit/directives/keyed.js";
 
-export type MessageType = { type: "login"; requester: Client["clientId"] } | { type: "logout" };
+export type MessageType =
+  | { type: "login"; requester: Client; }
+  | { type: "logout"; requester: Client; }
+  | { type: "initialized"; authenticated: boolean; requester: Client; }
+
 export type MessageCallback = CustomEventInit<MessageType>;
 
-export class KcUserManager {
+export class KcUserManager extends EventTarget {
   static instance: KcUserManager;
-  public clients: Map<Client["clientId"], Client> = new Map();
+  #clients: Map<Client["clientId"], Client> = new Map();
 
   public static getInstance(clientId: Client["clientId"]): Client {
     if (!KcUserManager.instance) {
@@ -15,42 +18,37 @@ export class KcUserManager {
     return KcUserManager.instance.#createClient(clientId);
   }
 
-  _login(client: Client) {
-    // lazy notify all of the clients
-    requestAnimationFrame(() => {
-      [...KcUserManager.instance.clients].forEach(([_, value]) => {
-        value.dispatchEvent(
-          new CustomEvent<MessageType>("update", {
-            detail: { type: "login", requester: "123" },
-          })
-        );
-      });
-    });
-  }
-
   #createClient(clientId: Client["clientId"]): Client {
-    if (KcUserManager.instance.clients.has(clientId)) {
-      const client = KcUserManager.instance.clients.get(clientId);
+    if (KcUserManager.instance.#clients.has(clientId)) {
+      const client = KcUserManager.instance.#clients.get(clientId);
       if (client) {
         return client;
       }
     }
-    const client = new Client(clientId, KcUserManager.instance);
-    KcUserManager.instance.clients.set(clientId, client);
+    const client = new Client(clientId);
+    KcUserManager.instance.#clients.set(clientId, client);
     return client;
+  }
+
+  protected _update(detail: MessageType) {
+    // lazy notify all of the clients
+    requestAnimationFrame(() => {
+      // send an event to all clients and to all 
+      KcUserManager.instance.dispatchEvent(
+        new CustomEvent<MessageType>("update", { detail: { ...detail } })
+      );
+    });
   }
 }
 
-export class Client extends EventTarget {
+export class Client extends KcUserManager {
   clientId: string;
-  manager: KcUserManager;
   keycloak: Keycloak;
   #initializer?: Promise<Boolean>;
 
-  constructor(clientId: Client["clientId"], manager: KcUserManager) {
+  constructor(clientId: Client["clientId"]) {
     super();
     this.clientId = clientId;
-    this.manager = manager;
 
     const kcConfig = {
       url: 'http://sso.my-app.traefik.me/auth',
@@ -74,21 +72,27 @@ export class Client extends EventTarget {
       responseMode: 'fragment',
       flow: 'standard',
     } satisfies KeycloakInitOptions;
-    console.log(this.#initializer);
+
     this.#initializer = this.keycloak.init(kcOptions)
       .then(authenticated => {
+        this._update({ type: 'initialized', authenticated, requester: this });
         if (authenticated) {
           if (this.keycloak.token) {
             // localStorage.setItem('kc-token', this.keycloak.token);
           }
         }
-        return authenticated
-      })
+        return authenticated;
+      });
     return this.#initializer;
   }
 
   public async login() {
-    this.manager._login(this);
+    this._update({ type: 'login', requester: this })
+    return this.keycloak.login();
+  }
+
+  public async logout() {
+    this._update({ type: 'logout', requester: this })
     return this.keycloak.login();
   }
 }
