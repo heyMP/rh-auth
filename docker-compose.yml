@@ -27,8 +27,8 @@ services:
     build: .
     labels:
       - "traefik.frontend.rule=Host:my-app.traefik.me"
-      - "traefik.port=8000"
-    entrypoint: 'npm run start'
+      - "traefik.port=5173"
+    entrypoint: 'npm run dev'
     volumes:
       - /app/node_modules
       - .:/app

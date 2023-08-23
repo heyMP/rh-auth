@@ -1,38 +1,19 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="Description" content="Put your description here.">
-  <script src="https://sso.stage.redhat.com/auth/js/keycloak.js"></script>
-  <base href="/">
-
-  <style>
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: sans-serif;
-      background-color: #ededed;
-    }
-  </style>
-  <title>rh-auth</title>
+  <title></title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="//unpkg.com/alpinejs" defer></script>
 </head>
 
 <body>
-  <button id="login">Login</button>
-  <button id="logout">Logout</button>
-  <rh-auth></rh-auth>
-  <script type="module" src="./out-tsc/src/rh-auth.js"></script>
-  <script type="module">
-    document.querySelector('#login').addEventListener('click', e => {
-      document.querySelector('rh-auth').login();
-    })
-    document.querySelector('#logout').addEventListener('click', e => {
-      document.querySelector('rh-auth').logout();
-    })
-  </script>
+  <h2>App Foo</h2>
+  <app-foo></app-foo>
+  <h2>App Bar</h2>
+  <app-bar></app-bar>
+  <script type="module" src="/src/index.ts"></script>
 </body>
 
 </html>
