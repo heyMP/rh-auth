@@ -1,4 +1,4 @@
-import Keycloak, { type KeycloakInitOptions } from "keycloak-js";
+import Keycloak, { type KeycloakInitOptions, KeycloakConfig } from "keycloak-js";
 
 type OmitPropFromUnion<T, K extends keyof T> = T extends T ? Omit<T, K> : never;
 
@@ -9,33 +9,37 @@ export type MessageType =
 
 export type MessageCallback = CustomEventInit<MessageType>;
 
+const requiredKcConfigParams: Array<keyof KeycloakConfig> = ['clientId', 'url', 'realm'];
+
 export class KcUserManager extends EventTarget {
   static instance: KcUserManager;
   #clients: Map<Client["clientId"], Client> = new Map();
 
-  public static getInstance(clientId: Client["clientId"]): Client {
+  public static getInstance(kcConfig: KeycloakConfig): Client {
     if (!KcUserManager.instance) {
       KcUserManager.instance = new KcUserManager();
     }
-    return KcUserManager.instance.#createClient(clientId);
+    return KcUserManager.instance.#createClient(kcConfig);
   }
 
-  #createClient(clientId: Client["clientId"]): Client {
-    if (KcUserManager.instance.#clients.has(clientId)) {
-      const client = KcUserManager.instance.#clients.get(clientId);
+  #createClient(kcConfig: KeycloakConfig): Client {
+    if (!requiredKcConfigParams.every(i => kcConfig.hasOwnProperty(i))) {
+      throw new Error('Required kcConfig properties missing');
+    }
+    if (KcUserManager.instance.#clients.has(kcConfig.clientId)) {
+      const client = KcUserManager.instance.#clients.get(kcConfig.clientId);
       if (client) {
         return client;
       }
     }
-    const client = new Client(clientId);
-    KcUserManager.instance.#clients.set(clientId, client);
+    const client = new Client(kcConfig);
+    KcUserManager.instance.#clients.set(kcConfig.clientId, client);
     return client;
   }
 
   protected _update(client: Client, detail: OmitPropFromUnion<MessageType, 'requester'>) {
-    // lazy notify all of the clients
+    // lazy send notifications to the message bus 
     requestAnimationFrame(() => {
-      // send an event to all clients and to all 
       KcUserManager.instance.dispatchEvent(
         new CustomEvent<MessageType>("update", { detail: { ...detail, requester: client } })
       );
@@ -44,19 +48,14 @@ export class KcUserManager extends EventTarget {
 }
 
 export class Client extends KcUserManager {
-  clientId: string;
+  clientId: KeycloakConfig['clientId'];
   keycloak: Keycloak;
   #initializer?: Promise<Boolean>;
 
-  constructor(clientId: Client["clientId"]) {
+  constructor(kcConfig: KeycloakConfig) {
     super();
-    this.clientId = clientId;
+    this.clientId = kcConfig.clientId;
 
-    const kcConfig = {
-      url: 'http://sso.my-app.traefik.me/auth',
-      realm: 'redhat-external',
-      clientId: clientId,
-    }
     this.keycloak = new Keycloak(kcConfig);
 
     KcUserManager.instance.addEventListener('update', (e: MessageCallback) => {
@@ -69,8 +68,8 @@ export class Client extends KcUserManager {
   public init() {
     if (this.#initializer) {
       return this.#initializer;
-    }
 
+    }
     const kcOptions = {
       enableLogging: true,
       pkceMethod: "S256",

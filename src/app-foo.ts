@@ -6,14 +6,21 @@ class AppFoo extends LitElement {
   @property()
   clientId?: string;
 
+  @property()
+  url?: string;
+
+  @property()
+  realm?: string;
+
   client?: Client;
 
   #init() {
-    if (this.clientId) {
-      this.client = KcUserManager.getInstance(this.clientId);
-      KcUserManager.instance.addEventListener('update', (e: MessageCallback) => {
-        console.log('KcUserManager', { ...e.detail })
-      })
+    if (this.clientId && this.url && this.realm) {
+      this.client = KcUserManager.getInstance({
+        clientId: this.clientId,
+        url: this.url,
+        realm: this.realm
+      });
       this.client?.init().then(() => {
         this.requestUpdate()
       });
