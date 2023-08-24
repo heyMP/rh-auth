@@ -1,5 +1,7 @@
 import Keycloak, { type KeycloakInitOptions } from "keycloak-js";
 
+type OmitPropFromUnion<T, K extends keyof T> = T extends T ? Omit<T, K> : never;
+
 export type MessageType =
   | { type: "login"; requester: Client; }
   | { type: "logout"; requester: Client; }
@@ -30,12 +32,12 @@ export class KcUserManager extends EventTarget {
     return client;
   }
 
-  protected _update(detail: MessageType) {
+  protected _update(client: Client, detail: OmitPropFromUnion<MessageType, 'requester'>) {
     // lazy notify all of the clients
     requestAnimationFrame(() => {
       // send an event to all clients and to all 
       KcUserManager.instance.dispatchEvent(
-        new CustomEvent<MessageType>("update", { detail: { ...detail } })
+        new CustomEvent<MessageType>("update", { detail: { ...detail, requester: client } })
       );
     });
   }
@@ -56,6 +58,12 @@ export class Client extends KcUserManager {
       clientId: clientId,
     }
     this.keycloak = new Keycloak(kcConfig);
+
+    KcUserManager.instance.addEventListener('update', (e: MessageCallback) => {
+      if (e.detail?.type === 'initialized' && e.detail.requester !== this && this.#initializer !== undefined) {
+        console.log({ ...e.detail })
+      }
+    });
   }
 
   public init() {
@@ -75,7 +83,7 @@ export class Client extends KcUserManager {
 
     this.#initializer = this.keycloak.init(kcOptions)
       .then(authenticated => {
-        this._update({ type: 'initialized', authenticated, requester: this });
+        this._update(this, { type: 'initialized', authenticated });
         if (authenticated) {
           if (this.keycloak.token) {
             // localStorage.setItem('kc-token', this.keycloak.token);
@@ -87,12 +95,12 @@ export class Client extends KcUserManager {
   }
 
   public async login() {
-    this._update({ type: 'login', requester: this })
+    this._update(this, { type: 'login' })
     return this.keycloak.login();
   }
 
   public async logout() {
-    this._update({ type: 'logout', requester: this })
+    this._update(this, { type: 'logout' })
     return this.keycloak.login();
   }
 }
