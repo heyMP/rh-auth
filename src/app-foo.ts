@@ -27,10 +27,8 @@ class AppFoo extends LitElement {
     }
   }
 
-  protected updated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
-    if (_changedProperties.has('clientId')) {
-      this.#init();
-    }
+  firstUpdated() {
+    this.#init()
   }
 
   renderActionButtons() {

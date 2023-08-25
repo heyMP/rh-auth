@@ -11,29 +11,39 @@ export type MessageCallback = CustomEventInit<MessageType>;
 
 const requiredKcConfigParams: Array<keyof KeycloakConfig> = ['clientId', 'url', 'realm'];
 
+/**
+ * Singleton that creates a new keycloak client instance.
+ *
+ * Usage: KcUserManager.getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions)
+ */
 export class KcUserManager extends EventTarget {
   static instance: KcUserManager;
-  #clients: Map<Client["clientId"], Client> = new Map();
+  private clients: Map<Client["clientId"], Client> = new Map();
 
-  public static getInstance(kcConfig: KeycloakConfig): Client {
+  public static getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions): Client {
     if (!KcUserManager.instance) {
       KcUserManager.instance = new KcUserManager();
     }
-    return KcUserManager.instance.#createClient(kcConfig);
+    return KcUserManager.instance.createClient(kcConfig, kcOptions);
   }
 
-  #createClient(kcConfig: KeycloakConfig): Client {
+  /**
+   * Create a new Client instance.
+   *
+   * Usage: KcUserManager.getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions)
+   */
+  private createClient(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions): Client {
     if (!requiredKcConfigParams.every(i => kcConfig.hasOwnProperty(i))) {
       throw new Error('Required kcConfig properties missing');
     }
-    if (KcUserManager.instance.#clients.has(kcConfig.clientId)) {
-      const client = KcUserManager.instance.#clients.get(kcConfig.clientId);
+    if (KcUserManager.instance.clients.has(kcConfig.clientId)) {
+      const client = KcUserManager.instance.clients.get(kcConfig.clientId);
       if (client) {
         return client;
       }
     }
-    const client = new Client(kcConfig);
-    KcUserManager.instance.#clients.set(kcConfig.clientId, client);
+    const client = new Client(kcConfig, kcOptions);
+    KcUserManager.instance.clients.set(kcConfig.clientId, client);
     return client;
   }
 
@@ -48,39 +58,48 @@ export class KcUserManager extends EventTarget {
 }
 
 export class Client extends KcUserManager {
-  clientId: KeycloakConfig['clientId'];
-  keycloak: Keycloak;
-  #initializer?: Promise<Boolean>;
+  public clientId: KeycloakConfig['clientId'];
+  public keycloak: Keycloak;
+  private kcOptions?: KeycloakInitOptions;
+  private initializer?: Promise<Boolean>;
 
-  constructor(kcConfig: KeycloakConfig) {
+  constructor(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions) {
     super();
     this.clientId = kcConfig.clientId;
 
     this.keycloak = new Keycloak(kcConfig);
+    this.kcOptions = kcOptions;
+    console.log(kcOptions)
 
     KcUserManager.instance.addEventListener('update', (e: MessageCallback) => {
-      if (e.detail?.type === 'initialized' && e.detail.requester !== this && this.#initializer !== undefined) {
+      if (e.detail?.type === 'initialized' && e.detail.requester !== this && this.initializer !== undefined) {
         console.log({ ...e.detail })
       }
     });
   }
 
   public init() {
-    if (this.#initializer) {
-      return this.#initializer;
-
+    if (this.initializer) {
+      return this.initializer;
     }
-    const kcOptions = {
-      enableLogging: true,
+
+    const kcOptions: KeycloakInitOptions = {
+      // default KeycloakInitOptions
+      enableLogging: false,
       pkceMethod: "S256",
-      silentCheckSsoRedirectUri: `${window.location.href}/silent-check-sso.html`,
+      /**
+       * TODO: change headers on dev server to allow for the following iframe capabilites 'allow-scripts allow-same-origin'
+       */
+      silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
       onLoad: "check-sso",
-      silentCheckSsoFallback: false,
+      silentCheckSsoFallback: true,
       responseMode: 'fragment',
       flow: 'standard',
-    } satisfies KeycloakInitOptions;
+      // user specified KeycloakInitOptions overrides
+      ...this.kcOptions,
+    };
 
-    this.#initializer = this.keycloak.init(kcOptions)
+    this.initializer = this.keycloak.init(kcOptions)
       .then(authenticated => {
         this._update(this, { type: 'initialized', authenticated });
         if (authenticated) {
@@ -90,19 +109,75 @@ export class Client extends KcUserManager {
         }
         return authenticated;
       });
-    return this.#initializer;
+    return this.initializer;
   }
 
-  public async login() {
-    this._update(this, { type: 'login' })
-    return this.keycloak.login();
+  /**
+   * Generates a login url.
+   */
+  public getLoginUrl(): string | undefined {
+    return this.keycloak?.createLoginUrl();
   }
 
-  public async logout() {
-    this._update(this, { type: 'logout' })
-    return this.keycloak.login();
+  /**
+   * Expose the login method.
+   */
+  public login() {
+    this.keycloak?.login();
+  }
+
+  /**
+   * Checks if the user is authenticated
+   */
+  public isLoggedIn(): boolean | undefined {
+    return this.keycloak?.authenticated;
+  }
+
+  /**
+   * Expose the logout method.
+   */
+  public logOut() {
+    this.keycloak?.logout();
+  }
+
+  /**
+   * Generates logout url
+   */
+  public getLogoutUrl(): string | undefined {
+    return this.keycloak?.createLogoutUrl();
+  }
+
+  /**
+   * Gets the parsed Identity Token.
+   */
+  public getIdTokenParsed() {
+    return this.keycloak?.idTokenParsed
+  }
+
+  /**
+   * Gets the Access Token.
+   *
+   * TODO: Get from shared storage instead.
+   */
+  public getToken() {
+    return this.keycloak?.token;
+  }
+
+  /**
+   * Wraps console log. Maybe don't need.
+   *
+   * @param data
+   * @private
+   *
+   * TODO: Remove or fix ts ignore.
+   */
+  private log(...data: unknown[]): void {
+    // @ts-ignore
+    console.log(...data);
+  }
+
+  private error(...data: unknown[]): void {
+    // @ts-ignore
+    console.error(...data);
   }
 }
-
-// @ts-ignore
-window.KcUserManager = KcUserManager;
