@@ -35,6 +35,8 @@ export class KcUserManager extends EventTarget {
     if (!requiredKcConfigParams.every(i => kcConfig.hasOwnProperty(i))) {
       throw new Error('Required kcConfig properties missing');
     }
+    // if a user has already instanciated a client using the same
+    // clientId then we'll return the existing instance.
     if (KcUserManager.instance.clients.has(kcConfig.clientId)) {
       const client = KcUserManager.instance.clients.get(kcConfig.clientId);
       if (client) {
