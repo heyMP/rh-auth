@@ -20,18 +20,17 @@ export class KcUserManager extends EventTarget {
   static instance: KcUserManager;
   private clients: Map<Client["clientId"], Client> = new Map();
 
+  /**
+   * Create a new Client instance.
+   *
+   * Usage: KcUserManager.getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions)
+   */
   public static getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions): Client {
     if (!KcUserManager.instance) {
       KcUserManager.instance = new KcUserManager();
     }
     return KcUserManager.instance.createClient(kcConfig, kcOptions);
   }
-
-  /**
-   * Create a new Client instance.
-   *
-   * Usage: KcUserManager.getInstance(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions)
-   */
   private createClient(kcConfig: KeycloakConfig, kcOptions?: KeycloakInitOptions): Client {
     if (!requiredKcConfigParams.every(i => kcConfig.hasOwnProperty(i))) {
       throw new Error('Required kcConfig properties missing');
